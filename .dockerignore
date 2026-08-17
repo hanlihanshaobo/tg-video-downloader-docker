@@ -1,0 +1,32 @@
+# Git / VCS
+.git
+.gitignore
+.github
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.session
+*.session-journal
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Data & Downloads
+data/
+downloads/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store

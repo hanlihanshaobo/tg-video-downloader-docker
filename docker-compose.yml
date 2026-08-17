@@ -1,0 +1,32 @@
+# =====================================================================
+# Telegram Video Downloader - Docker Compose
+# =====================================================================
+# Quick start:
+#   1. cp .env.example .env        (fill in API_ID / API_HASH / CHANNEL_ID)
+#   2. 首次使用请把下方 image 地址中的 <YOUR_GITHUB_USERNAME>
+#      替换为你的 GitHub 用户名（CI 推送后即可直接拉取镜像）
+#   3. docker compose up -d        (start downloading)
+#   4. docker compose run --rm telegram-downloader list  (first-time login)
+#   也可以去掉 image 行改用本地构建: docker compose build && docker compose up -d
+# =====================================================================
+
+services:
+  telegram-downloader:
+    image: ghcr.io/<YOUR_GITHUB_USERNAME>/telegram-video-downloader:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telegram-video-downloader
+    restart: unless-stopped
+
+    # Telegram API credentials & settings are read from .env
+    env_file:
+      - .env
+
+    # Persist the Telethon session and downloaded videos on the host
+    volumes:
+      - ./data:/app/data
+
+    # Interactive terminal needed for the first-time login
+    stdin_open: true
+    tty: true
