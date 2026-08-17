@@ -94,8 +94,7 @@ docker compose logs -f telegram-downloader   # 实时查看进度
 | 手动触发（Actions 页面） | `latest`、`sha-<commit>` |
 
 - 自动构建 **linux/amd64**（x86_64）+ **linux/arm64**（aarch64）+ **linux/arm/v7**（arm32）三架构镜像（buildx + QEMU）
-- 默认推送到 **GHCR**：`ghcr.io/<owner>/<repo>`，无需额外配置
-- **可选推送到 Docker Hub**：在仓库 `Settings → Secrets and variables → Actions` 中配置 `DOCKERHUB_USERNAME`（Variables）与 `DOCKERHUB_TOKEN`（Secrets，在 Docker Hub 创建 Read & Write 权限的 Access Token）后自动启用
+- 推送到 **GHCR**：`ghcr.io/<owner>/<repo>`，无需额外配置（使用内置 `GITHUB_TOKEN`）
 
 ### 使用 CI 的步骤
 

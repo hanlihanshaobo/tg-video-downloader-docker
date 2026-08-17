@@ -6,13 +6,9 @@
 #   - push v* 版本 tag（如 v1.0.0）
 #   - 手动触发（Actions 页面 -> Run workflow）
 #
-# 推送目标:
-#   - GHCR  ghcr.io/<owner>/<repo>           默认启用，无需额外配置
-#   - Docker Hub（可选）在仓库 Settings -> Secrets and variables -> Actions
-#     配置以下内容后自动启用:
-#       Variables:  DOCKERHUB_USERNAME
-#       Secrets:    DOCKERHUB_TOKEN   (在 https://hub.docker.com/settings/security
-#                                    创建 Access Token，权限选 Read & Write)
+# 推送目标: GHCR (ghcr.io/<owner>/<repo>)
+#   无需任何额外配置，使用内置 GITHUB_TOKEN 自动推送。
+#   首次构建后 GHCR 包默认 private，可在仓库 Packages 页面改为 public。
 # =====================================================================
 
 name: Build & Push Docker Image
@@ -56,20 +52,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Log in to Docker Hub (optional)
-        if: vars.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != ''
-        uses: docker/login-action@v3
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Extract metadata (tags & labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            ${{ vars.DOCKERHUB_USERNAME != '' ? format('{0}/telegram-video-downloader', vars.DOCKERHUB_USERNAME) : '' }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
