@@ -30,7 +30,15 @@ RUN apt-get update \
         git \
         gcc \
         python3-dev \
+        curl \
     && rm -rf /var/lib/apt/lists/*
+
+# 安装 Rust 工具链: cryptg>=0.5 由 Rust 重写 (setuptools-rust + PyO3)，
+# 仅 x86_64/aarch64 有预编译 wheel。arm32 (arm/v7) 等平台需源码编译，
+# 因此统一安装 cargo/rustc，保证任何平台都能构建。
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
+    && /root/.cargo/bin/rustc --version
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # 克隆上游代码（默认克隆默认分支；指定 UPSTREAM_REF 时克隆对应分支）
 RUN if [ -n "$UPSTREAM_REF" ]; then \
