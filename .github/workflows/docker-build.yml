@@ -64,7 +64,7 @@ jobs:
             type=semver,pattern={{major}}
             type=sha
           flavor: |
-            latest=auto
+            latest=true
 
       - name: Build and push
         uses: docker/build-push-action@v6
