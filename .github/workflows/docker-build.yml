@@ -69,7 +69,7 @@ jobs:
         with:
           images: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            ${{ vars.DOCKERHUB_USERNAME != '' && format('{0}/telegram-video-downloader', vars.DOCKERHUB_USERNAME) }}
+            ${{ vars.DOCKERHUB_USERNAME != '' ? format('{0}/telegram-video-downloader', vars.DOCKERHUB_USERNAME) : '' }}
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
