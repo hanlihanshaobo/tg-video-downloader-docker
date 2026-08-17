@@ -10,7 +10,7 @@
 - 上游仓库：[xyzbuddy/telegram-video-downloader](https://github.com/xyzbuddy/telegram-video-downloader)
 - 原功能：使用 Telethon 登录 Telegram 账号，自动下载指定频道 / 群聊中的视频文件
 - 原特性：cryptg 高速解密、3 路并发下载、实时进度百分比、按大小预算筛选、`.env` 安全配置
-- 上游代码默认从 `main` 分支拉取，可通过构建参数覆盖（见下方「本地构建」）
+- 上游代码默认从 `main` 分支拉取（镜像构建阶段自动完成）
 
 ## 功能特性
 
@@ -47,10 +47,9 @@ docker pull ghcr.io/hanlihanshaobo/tg-video-downloader-docker:latest
 
 **方式 B：使用 docker compose**
 
-仓库内已带 `docker-compose.yml`，`image` 已指向本项目 GHCR 镜像（也可去掉 `image` 行改用本地构建）：
+仓库内已带 `docker-compose.yml`，`image` 已指向本项目 GHCR 镜像，直接启动即可：
 
 ```bash
-docker compose build   # 本地构建
 docker compose up -d
 ```
 
@@ -77,7 +76,7 @@ docker compose logs -f telegram-downloader   # 实时查看进度
 
 | 命令 | 说明 |
 | --- | --- |
-| `docker compose up -d --build` | 构建并后台启动 |
+| `docker compose up -d` | 后台启动 |
 | `docker compose run --rm telegram-downloader list` | 列出频道（首次登录） |
 | `docker compose logs -f telegram-downloader` | 跟踪下载进度 |
 | `docker compose stop` | 停止容器 |
@@ -102,21 +101,6 @@ docker compose logs -f telegram-downloader   # 实时查看进度
 2. 首次推送后，在 Actions 页面确认 workflow 运行成功
 3. 到仓库主页 `Packages` 标签页确认 GHCR 镜像已生成（首次构建后 GHCR 会默认标记为 private，可在镜像设置中改为 public）
 4. 需要发版时打 tag：`git tag v1.0.0 && git push origin v1.0.0`
-
-## 本地构建
-
-```bash
-docker build -t telegram-video-downloader .
-```
-
-默认从上游 `main` 分支拉取代码。如需指定上游仓库 / 分支：
-
-```bash
-docker build \
-  --build-arg UPSTREAM_REPO=https://github.com/xyzbuddy/telegram-video-downloader.git \
-  --build-arg UPSTREAM_REF=main \
-  -t telegram-video-downloader .
-```
 
 ## 安全提醒
 

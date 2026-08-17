@@ -4,7 +4,6 @@
 # Quick start:
 #   1. cp .env.example .env        (fill in API_ID / API_HASH / CHANNEL_ID)
 #   2. image 已指向本项目 GHCR 镜像（CI 自动推送，latest 保持最新）
-#      如需本地构建，去掉 image 行即可: docker compose build && docker compose up -d
 #   3. docker compose up -d        (start downloading)
 #   4. docker compose run --rm telegram-downloader list  (first-time login)
 # =====================================================================
@@ -12,9 +11,6 @@
 services:
   telegram-downloader:
     image: ghcr.io/hanlihanshaobo/tg-video-downloader-docker:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: telegram-video-downloader
     restart: unless-stopped
 
