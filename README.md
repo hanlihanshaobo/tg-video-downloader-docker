@@ -42,12 +42,12 @@ CHANNEL_ID=your_channel_id_here
 **方式 A：直接拉取（推荐，CI 构建后）**
 
 ```bash
-docker pull ghcr.io/<你的 GitHub 用户名>/telegram-video-downloader:latest
+docker pull ghcr.io/hanlihanshaobo/tg-video-downloader-docker:latest
 ```
 
 **方式 B：使用 docker compose**
 
-仓库内已带 `docker-compose.yml`（请先把其中的镜像地址改成你自己的 GitHub 用户名，或改用本地构建）：
+仓库内已带 `docker-compose.yml`，`image` 已指向本项目 GHCR 镜像（也可去掉 `image` 行改用本地构建）：
 
 ```bash
 docker compose build   # 本地构建
@@ -81,7 +81,7 @@ docker compose logs -f telegram-downloader   # 实时查看进度
 | `docker compose run --rm telegram-downloader list` | 列出频道（首次登录） |
 | `docker compose logs -f telegram-downloader` | 跟踪下载进度 |
 | `docker compose stop` | 停止容器 |
-| `docker run -it --rm --env-file .env -v "$PWD/data:/app/data" ghcr.io/<用户名>/telegram-video-downloader:latest list` | 纯 Docker 方式登录 |
+| `docker run -it --rm --env-file .env -v "$PWD/data:/app/data" ghcr.io/hanlihanshaobo/tg-video-downloader-docker:latest list` | 纯 Docker 方式登录 |
 
 ## GitHub Actions 自动构建（CI）
 
@@ -94,7 +94,7 @@ docker compose logs -f telegram-downloader   # 实时查看进度
 | 手动触发（Actions 页面） | `latest`、`sha-<commit>` |
 
 - 自动构建 **linux/amd64**（x86_64）+ **linux/arm64**（aarch64）+ **linux/arm/v7**（arm32）三架构镜像（buildx + QEMU）
-- 推送到 **GHCR**：`ghcr.io/<owner>/<repo>`，无需额外配置（使用内置 `GITHUB_TOKEN`）
+- 推送到 **GHCR**：`ghcr.io/hanlihanshaobo/tg-video-downloader-docker`，无需额外配置（使用内置 `GITHUB_TOKEN`）
 
 ### 使用 CI 的步骤
 
