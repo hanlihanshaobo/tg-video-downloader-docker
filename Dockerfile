@@ -47,6 +47,63 @@ RUN if [ -n "$UPSTREAM_REF" ]; then \
         git clone --depth 1 "$UPSTREAM_REPO" src; \
     fi
 
+# 对 downloader.py 打【去重补丁】：
+#   维护 downloaded_ids.txt（与视频同目录，随数据卷持久化），
+#   记录已下载的消息 ID；扫描时跳过已下载的视频，避免重复下载。
+RUN python3 - <<'EOF'
+path = "/build/src/downloader.py"
+src = open(path, encoding="utf-8").read()
+
+def patch(orig, new):
+    global src
+    n = src.count(orig)
+    if n != 1:
+        raise SystemExit(f"patch anchor not found (count={n}): {orig[:70]!r}")
+    src = src.replace(orig, new)
+
+# 1) 定义下载记录文件，并加载已下载的消息 ID 集合
+patch(
+    'downloads_dir = os.getenv("DOWNLOADS_DIR", "downloads")',
+    'downloads_dir = os.getenv("DOWNLOADS_DIR", "downloads")\n'
+    'downloaded_ids_file = os.path.join(downloads_dir, "downloaded_ids.txt")\n'
+    'downloaded_ids = set()\n'
+    'if os.path.exists(downloaded_ids_file):\n'
+    '    with open(downloaded_ids_file, "r", encoding="utf-8") as _f:\n'
+    '        downloaded_ids = {int(_l.strip()) for _l in _f if _l.strip()}\n'
+)
+
+# 2) 扫描时跳过已下载的消息
+patch(
+    '        if not message.video:\n'
+    '            continue\n'
+    '\n'
+    '        file_size = getattr(message.file, "size", 0)',
+    '        if not message.video:\n'
+    '            continue\n'
+    '\n'
+    '        if message.id in downloaded_ids:\n'
+    '            continue\n'
+    '\n'
+    '        file_size = getattr(message.file, "size", 0)'
+)
+
+# 3) 下载成功后把消息 ID 追加到记录文件
+patch(
+    '            print(f"\u2713 [Finished] Video ID: {message.id} ({video_name})")\n'
+    '            return True',
+    '            print(f"\u2713 [Finished] Video ID: {message.id} ({video_name})")\n'
+    '            try:\n'
+    '                with open(downloaded_ids_file, "a", encoding="utf-8") as _f:\n'
+    '                    _f.write(f"{message.id}\\n")\n'
+    '            except OSError:\n'
+    '                pass\n'
+    '            return True'
+)
+
+open(path, "w", encoding="utf-8").write(src)
+print("dedup patch applied")
+EOF
+
 # 编译安装依赖为 wheel（含 cryptg 等 C 扩展）
 RUN pip wheel --no-cache-dir --wheel-dir /wheels -r src/requirements.txt
 
