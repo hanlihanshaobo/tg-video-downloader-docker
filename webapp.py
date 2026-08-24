@@ -39,10 +39,17 @@ _client = None
 _client_lock = asyncio.Lock()  # serializes dialogs query vs download
 _download_lock = asyncio.Lock()  # one download at a time
 _download_state = {"running": False, "chat_id": None, "detail": ""}
+_monitor_state = {"active": False, "chat_id": None, "interval": 300, "task": None}
 
 
 class DownloadRequest(BaseModel):
     chat_id: int
+    max_total_size: str | int | None = None
+
+
+class MonitorRequest(BaseModel):
+    chat_id: int
+    interval: int = 300  # seconds between scans
     max_total_size: str | int | None = None
 
 
@@ -103,6 +110,19 @@ def clean_filename(name: str) -> str:
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
+def chat_folder_name(entity) -> str:
+    """Build a safe folder name for a chat/channel/bot based on its title/username."""
+    title = getattr(entity, "title", None)
+    if not title:
+        title = getattr(entity, "username", None)
+    if not title:
+        first = getattr(entity, "first_name", None)
+        last = getattr(entity, "last_name", None)
+        title = (first or "") + (" " + last if last else "")
+    title = title or str(getattr(entity, "id", "chat"))
+    return clean_filename(title)[:80] or str(getattr(entity, "id", "chat"))
+
+
 def load_downloaded_ids() -> set:
     path = Path(DATA_DIR) / DOWNLOADS_DIR / "downloaded_ids.txt"
     ids = set()
@@ -137,7 +157,7 @@ def make_progress_cb(message_id, video_name, size_mb):
     return cb
 
 
-async def download_worker(message, index, total_count) -> bool:
+async def download_worker(message, index, total_count, chat_dir) -> bool:
     file_size = getattr(message.file, "size", 0)
     size_mb = file_size / (1024 * 1024)
 
@@ -160,7 +180,7 @@ async def download_worker(message, index, total_count) -> bool:
     async with DOWNLOAD_SEMAPHORE:
         print(f"\n[Queue {index}/{total_count}] Starting: {video_name} (ID: {message.id})")
         try:
-            output_path = os.path.join(DATA_DIR, DOWNLOADS_DIR, video_name)
+            output_path = os.path.join(chat_dir, video_name)
             await message.download_media(file=output_path, progress_callback=make_progress_cb(message.id, video_name, size_mb))
             print(f"✓ [Finished] Video ID: {message.id} ({video_name})")
             record_downloaded_id(message.id)
@@ -190,6 +210,9 @@ async def run_download(chat_id: int, max_total_size: int):
         print(f"[ERROR] Failed to connect/locate channel {chat_id}: {e}")
         return
 
+    chat_dir = downloads_path / chat_folder_name(entity)
+    chat_dir.mkdir(parents=True, exist_ok=True)
+
     queue = []
     scanned = 0
     limit_reached = False
@@ -214,7 +237,7 @@ async def run_download(chat_id: int, max_total_size: int):
         _download_state["detail"] = "没有需要下载的视频"
         return
 
-    tasks = [download_worker(m, idx + 1, total) for idx, m in enumerate(queue)]
+    tasks = [download_worker(m, idx + 1, total, chat_dir) for idx, m in enumerate(queue)]
     results = await asyncio.gather(*tasks)
     success = sum(1 for r in results if r)
     _download_state["detail"] = f"下载完成：成功 {success} / {total}，失败 {total - success}"
@@ -308,7 +331,76 @@ async def download_status():
         "running": _download_state["running"],
         "chat_id": _download_state["chat_id"],
         "detail": _download_state["detail"],
+        "monitor": {
+            "active": _monitor_state["active"],
+            "chat_id": _monitor_state["chat_id"],
+            "interval": _monitor_state["interval"],
+        },
     }
+
+
+# ---------------------------------------------------------------------
+# Auto-monitor: periodically scan a chat and download new videos
+# ---------------------------------------------------------------------
+
+async def _monitor_loop(chat_id: int, max_size: int, interval: int):
+    while _monitor_state["active"]:
+        try:
+            async with _client_lock, _download_lock:
+                await run_download(chat_id, max_size)
+        except Exception as e:
+            _download_state["detail"] = f"监控扫描出错: {e}"
+            print(f"[ERROR] Monitor scan failed: {e}")
+        for _ in range(interval):
+            if not _monitor_state["active"]:
+                return
+            await asyncio.sleep(1)
+
+
+@app.post("/api/monitor")
+async def start_monitor(req: MonitorRequest):
+    err = validate_credentials()
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+
+    if req.interval < 30:
+        raise HTTPException(status_code=400, detail="轮询间隔至少 30 秒")
+
+    max_size = parse_size(req.max_total_size)
+    if req.max_total_size is not None and max_size is None:
+        raise HTTPException(status_code=400, detail=f"无法解析大小上限: '{req.max_total_size}'")
+
+    if _monitor_state["active"]:
+        return {
+            "active": True,
+            "chat_id": _monitor_state["chat_id"],
+            "interval": _monitor_state["interval"],
+            "note": "监控已在运行，未重复启动。",
+        }
+
+    _monitor_state["active"] = True
+    _monitor_state["chat_id"] = req.chat_id
+    _monitor_state["interval"] = req.interval
+    _monitor_state["task"] = asyncio.create_task(
+        _monitor_loop(req.chat_id, max_size or 0, req.interval)
+    )
+    return {
+        "active": True,
+        "chat_id": req.chat_id,
+        "interval": req.interval,
+        "note": f"已开始自动监控会话 {req.chat_id}，每 {req.interval} 秒扫描一次新增视频。",
+    }
+
+
+@app.delete("/api/monitor")
+async def stop_monitor():
+    _monitor_state["active"] = False
+    task = _monitor_state.get("task")
+    if task:
+        task.cancel()
+        _monitor_state["task"] = None
+    _monitor_state["chat_id"] = None
+    return {"active": False, "note": "自动监控已停止。"}
 
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "web")), name="static")

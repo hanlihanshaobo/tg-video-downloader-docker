@@ -198,6 +198,17 @@
         </div>
       </details>
 
+      <details id="monitorPanel" hidden>
+        <summary>自动监控 · 新增即下载</summary>
+        <div class="dlrow">
+          <div id="monitorInfo" style="margin-bottom:10px; color:var(--amber);"></div>
+          <label>轮询间隔 (秒):</label>
+          <input id="monitorInterval" type="number" value="300" min="30" style="width:110px;">
+          <button id="monitorStartBtn">◉ 启动监控</button>
+          <button id="monitorStopBtn" class="danger">■ 停止监控</button>
+        </div>
+      </details>
+
       <table>
         <thead>
           <tr><th>名称</th><th>ID</th><th>类型</th><th>未读</th></tr>
@@ -254,7 +265,10 @@ function select(d, tr) {
   tr.classList.add("fade");
   document.getElementById("selectedInfo").textContent =
     `◈ 已选择: ${d.name}  [ID: ${d.id}]  [${d.type}]`;
+  document.getElementById("monitorInfo").textContent =
+    `将自动监控: ${d.name}  [ID: ${d.id}]`;
   panel.hidden = false;
+  monitorPanel.hidden = false;
 }
 
 async function doDownload() {
@@ -291,20 +305,65 @@ document.getElementById("downloadBtn").addEventListener("click", doDownload);
 document.getElementById("cancelBtn").addEventListener("click", () => {
   selected = null;
   panel.hidden = true;
+  monitorPanel.hidden = true;
   [...rowsEl.children].forEach(r => r.classList.remove("fade"));
 });
+
+const monitorPanel = document.getElementById("monitorPanel");
+const monitorInfo = document.getElementById("monitorInfo");
+
+async function startMonitor() {
+  if (!selected) return;
+  monitorStartBtn.disabled = true;
+  try {
+    const interval = parseInt(document.getElementById("monitorInterval").value, 10) || 300;
+    const res = await fetch("/api/monitor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: selected.id, interval }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    setStatus(data.note, "ok");
+  } catch (e) {
+    setStatus("监控启动失败: " + e.message);
+  } finally {
+    monitorStartBtn.disabled = false;
+  }
+}
+
+async function stopMonitor() {
+  try {
+    const res = await fetch("/api/monitor", { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    setStatus(data.note, "ok");
+  } catch (e) {
+    setStatus("监控停止失败: " + e.message);
+  }
+}
+
+document.getElementById("monitorStartBtn").addEventListener("click", startMonitor);
+document.getElementById("monitorStopBtn").addEventListener("click", stopMonitor);
 
 const taskEl = document.getElementById("taskStatus");
 async function pollTaskStatus() {
   try {
     const res = await fetch("/api/status");
     const data = await res.json();
+    const mon = data.monitor;
+    const monText = (mon && mon.active)
+      ? ` ● 自动监控中 (会话 ${mon.chat_id} / 每 ${mon.interval} 秒)`
+      : "";
     if (data.running) {
       taskEl.style.display = "block";
-      taskEl.textContent = `◉ 下载进行中 (会话 ${data.chat_id}): ${data.detail || "..."}`;
+      taskEl.textContent = `◉ 下载进行中 (会话 ${data.chat_id}): ${data.detail || "..."}${monText}`;
     } else if (data.chat_id) {
       taskEl.style.display = "block";
-      taskEl.textContent = `◎ 上次任务 (会话 ${data.chat_id}): ${data.detail || "已完成"}`;
+      taskEl.textContent = `◎ 上次任务 (会话 ${data.chat_id}): ${data.detail || "已完成"}${monText}`;
+    } else if (mon && mon.active) {
+      taskEl.style.display = "block";
+      taskEl.textContent = `● 自动监控中 (会话 ${mon.chat_id} / 每 ${mon.interval} 秒)`;
     } else {
       taskEl.style.display = "none";
     }
