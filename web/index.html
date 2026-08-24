@@ -3,71 +3,218 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Telegram 视频下载器 - Web 后台</title>
+<title>NEURAL DOWNLINK // TG Video</title>
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    --cyan: #00e5ff;
+    --cyan-dim: #0ea5b7;
+    --magenta: #ff2d95;
+    --amber: #ffc857;
+    --bg0: #05070f;
+    --bg1: #0a1020;
+    --bg2: #101a30;
+    --line: rgba(0, 229, 255, 0.18);
+    --text: #c9f6ff;
+    --text-dim: #6b93a6;
+  }
   * { box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    margin: 0; padding: 20px; line-height: 1.5;
+    margin: 0;
+    min-height: 100vh;
+    font-family: "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(0,229,255,0.10), transparent 60%),
+      radial-gradient(1000px 500px at 90% 110%, rgba(255,45,149,0.10), transparent 60%),
+      var(--bg0);
+    background-attachment: fixed;
+    overflow-x: hidden;
   }
-  h1 { margin-top: 0; }
-  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  /* starfield */
+  .stars {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      radial-gradient(1px 1px at 25px 25px, rgba(255,255,255,0.7), transparent),
+      radial-gradient(1px 1px at 120px 90px, rgba(255,255,255,0.5), transparent),
+      radial-gradient(1.5px 1.5px at 200px 160px, rgba(0,229,255,0.8), transparent),
+      radial-gradient(1px 1px at 80px 250px, rgba(255,255,255,0.4), transparent),
+      radial-gradient(1px 1px at 300px 40px, rgba(255,255,255,0.6), transparent),
+      radial-gradient(1px 1px at 360px 300px, rgba(0,229,255,0.5), transparent);
+    background-size: 420px 340px;
+    animation: drift 90s linear infinite;
+  }
+  @keyframes drift { from { background-position: 0 0; } to { background-position: -420px -340px; } }
+  /* scanline overlay */
+  .scanlines {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.35;
+    background: repeating-linear-gradient(
+      0deg, transparent 0 2px, rgba(0,229,255,0.03) 2px 4px);
+  }
+  .app {
+    position: relative; z-index: 2;
+    max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px;
+  }
+  header { margin-bottom: 24px; }
+  .title {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 12px;
+    text-shadow: 0 0 12px rgba(0,229,255,0.6), 0 0 40px rgba(0,229,255,0.3);
+  }
+  .title h1 {
+    margin: 0; font-size: 26px; letter-spacing: 4px; color: var(--cyan);
+    font-weight: 600; text-transform: uppercase;
+  }
+  .title .sub { color: var(--text-dim); font-size: 12px; letter-spacing: 2px; }
+  .statusline { margin-top: 10px; font-size: 12px; color: var(--text-dim); letter-spacing: 1px; }
+  .statusline .led { display:inline-block; width:8px; height:8px; border-radius:50%; background: var(--cyan); margin-right:6px; box-shadow:0 0 8px var(--cyan); animation: blink 1.6s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .panel {
+    background: linear-gradient(180deg, rgba(16,26,48,0.7), rgba(8,12,24,0.8));
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 0 24px rgba(0,229,255,0.06), inset 0 0 30px rgba(0,229,255,0.03);
+    padding: 16px;
+  }
+
+  .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
   button {
-    padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
-    background: #2563eb; color: #fff; font-size: 14px;
+    font-family: inherit;
+    padding: 9px 18px;
+    background: transparent;
+    color: var(--cyan);
+    border: 1px solid var(--cyan);
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-size: 12px;
+    box-shadow: 0 0 10px rgba(0,229,255,0.2), inset 0 0 8px rgba(0,229,255,0.08);
+    transition: all 0.15s ease;
   }
-  button:hover { opacity: 0.9; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .status { padding: 8px 12px; border-radius: 6px; display: none; }
-  .status.error { display: block; background: #fee2e2; color: #b91c1c; }
-  .status.ok { display: block; background: #dcfce7; color: #15803d; }
+  button:hover:not(:disabled) {
+    background: rgba(0,229,255,0.12);
+    box-shadow: 0 0 18px rgba(0,229,255,0.5), inset 0 0 12px rgba(0,229,255,0.15);
+    text-shadow: 0 0 8px rgba(0,229,255,0.9);
+  }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  button.danger { color: var(--magenta); border-color: var(--magenta); box-shadow: 0 0 10px rgba(255,45,149,0.2), inset 0 0 8px rgba(255,45,149,0.08); }
+  button.danger:hover:not(:disabled) { background: rgba(255,45,149,0.12); box-shadow: 0 0 18px rgba(255,45,149,0.5); text-shadow: 0 0 8px rgba(255,45,149,0.9); }
+
+  .status { display: none; padding: 8px 14px; border-left: 2px solid var(--cyan); font-size: 13px; }
+  .status.error { display: block; border-color: var(--magenta); color: #ff9ec6; text-shadow: 0 0 8px rgba(255,45,149,0.4); }
+  .status.ok { display: block; color: var(--cyan); text-shadow: 0 0 8px rgba(0,229,255,0.4); }
+
+  #taskStatus {
+    display: none; margin-bottom: 14px; padding: 12px 14px;
+    border: 1px dashed rgba(255,200,87,0.4);
+    color: var(--amber);
+    font-size: 13px;
+    background: rgba(255,200,87,0.05);
+    text-shadow: 0 0 8px rgba(255,200,87,0.3);
+    border-radius: 6px;
+  }
+
+  details { margin-bottom: 16px; }
+  details summary {
+    cursor: pointer; color: var(--cyan); letter-spacing: 2px; font-size: 13px;
+    text-transform: uppercase; text-shadow: 0 0 8px rgba(0,229,255,0.4);
+    list-style: none;
+  }
+  details summary::before { content: "▸ "; color: var(--cyan); }
+  details[open] summary::before { content: "▾ "; }
+  details[open] { border: 1px solid var(--line); border-radius: 6px; padding: 14px; }
+  .dlrow { margin-top: 12px; }
+  .dlrow label { color: var(--text-dim); font-size: 12px; letter-spacing: 1px; margin-right: 8px; }
+  .dlrow input {
+    font-family: inherit; padding: 8px 10px; background: rgba(0,0,0,0.4);
+    border: 1px solid var(--line); color: var(--text); border-radius: 4px; font-size: 13px;
+    outline: none;
+  }
+  .dlrow input:focus { border-color: var(--cyan); box-shadow: 0 0 10px rgba(0,229,255,0.3); }
+  .dlrow button { margin-left: 10px; }
+
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
-  th { position: sticky; top: 0; background: inherit; }
-  tr.clickable { cursor: pointer; }
-  tr.clickable:hover { background: rgba(37, 99, 235, 0.08); }
-  .type { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
-  .type.Channel { background: #dbeafe; color: #1d4ed8; }
-  .type.MegaGroup { background: #e0e7ff; color: #4338ca; }
-  .type.Group { background: #cffafe; color: #0e7490; }
-  .type.Bot { background: #fce7f3; color: #be185d; }
-  .type.User { background: #f3f4f6; color: #374151; }
-  .fade { opacity: 0.5; pointer-events: none; }
+  thead th {
+    text-align: left; padding: 12px 14px; font-size: 11px; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--cyan-dim);
+    border-bottom: 1px solid var(--line);
+    text-shadow: 0 0 6px rgba(0,229,255,0.3);
+    position: sticky; top: 0; background: var(--bg1);
+  }
+  tbody td { padding: 12px 14px; border-bottom: 1px solid rgba(0,229,255,0.07); font-size: 14px; }
+  tr.clickable { cursor: pointer; transition: background 0.12s; }
+  tr.clickable:hover { background: rgba(0,229,255,0.06); }
+  tr.clickable:hover td:first-child { color: var(--cyan); text-shadow: 0 0 8px rgba(0,229,255,0.5); }
+  td.name { color: var(--text); }
+  td.id { color: var(--amber); letter-spacing: 1px; }
+  .type { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; border: 1px solid; }
+  .type.Channel { color: #7ad7ff; border-color: rgba(0,229,255,0.5); background: rgba(0,229,255,0.08); text-shadow: 0 0 6px rgba(0,229,255,0.5); }
+  .type.MegaGroup { color: #9aa3ff; border-color: rgba(140,150,255,0.5); background: rgba(140,150,255,0.08); text-shadow: 0 0 6px rgba(140,150,255,0.5); }
+  .type.Group { color: #6ff0c0; border-color: rgba(111,240,192,0.5); background: rgba(111,240,192,0.08); text-shadow: 0 0 6px rgba(111,240,192,0.5); }
+  .type.Bot { color: #ff7ad9; border-color: rgba(255,45,149,0.5); background: rgba(255,45,149,0.08); text-shadow: 0 0 6px rgba(255,45,149,0.5); }
+  .type.User { color: #ffc857; border-color: rgba(255,200,87,0.5); background: rgba(255,200,87,0.08); text-shadow: 0 0 6px rgba(255,200,87,0.5); }
+  .fade { opacity: 0.35; }
+  .empty { color: var(--text-dim); text-align: center; padding: 30px; font-size: 13px; letter-spacing: 2px; }
+  footer { margin-top: 24px; text-align: center; color: var(--text-dim); font-size: 11px; letter-spacing: 2px; }
+  footer .glow { color: var(--cyan); text-shadow: 0 0 6px rgba(0,229,255,0.6); }
+  @media (max-width: 640px) {
+    .title h1 { font-size: 20px; letter-spacing: 2px; }
+    th, td { padding: 10px; }
+  }
 </style>
 </head>
 <body>
-  <h1>Telegram 视频下载器</h1>
-  <div class="toolbar">
-    <button id="refreshBtn">刷新会话列表</button>
-    <span id="status" class="status"></span>
-  </div>
+  <div class="stars"></div>
+  <div class="scanlines"></div>
 
-  <div id="taskStatus" style="display:none; margin-bottom: 12px; padding: 10px 12px; border-radius: 6px; background: #f1f5f9; color: #0f172a;"></div>
+  <div class="app">
+    <header>
+      <div class="title">
+        <h1>Neural Downlink</h1>
+        <span class="sub">// TG VIDEO DOWNLOADER</span>
+      </div>
+      <div class="statusline"><span class="led"></span>UPLINK STABLE // SESSION DATA LINK</div>
+    </header>
 
-  <details id="downloadPanel" hidden>
-    <summary>下载设置</summary>
-    <div style="margin: 12px 0;">
-      <div id="selectedInfo" style="margin-bottom: 10px;"></div>
-      <label>大小上限 (字节，默认 20GB):</label>
-      <input id="maxSize" type="number" value="21474836480" style="padding:6px; margin-left:8px;">
-      <button id="downloadBtn" style="margin-left: 12px;">开始下载</button>
-      <button id="cancelBtn">取消</button>
+    <div class="panel">
+      <div class="toolbar">
+        <button id="refreshBtn">⟳ 刷新会话</button>
+        <span id="status" class="status"></span>
+      </div>
+
+      <div id="taskStatus"></div>
+
+      <details id="downloadPanel" hidden>
+        <summary>下载配置</summary>
+        <div class="dlrow">
+          <div id="selectedInfo" style="margin-bottom:10px; color:var(--cyan);"></div>
+          <label>大小上限 (字节 / 默认 20GB):</label>
+          <input id="maxSize" type="number" value="21474836480">
+          <button id="downloadBtn">▶ 开始下载</button>
+          <button id="cancelBtn" class="danger">✕ 取消</button>
+        </div>
+      </details>
+
+      <table>
+        <thead>
+          <tr><th>名称</th><th>ID</th><th>类型</th><th>未读</th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
     </div>
-  </details>
 
-  <table>
-    <thead>
-      <tr><th>名称</th><th>ID</th><th>类型</th><th>未读</th></tr>
-    </thead>
-    <tbody id="rows"></tbody>
-  </table>
+    <footer>NEURAL DOWNLINK v2.0 &nbsp;//&nbsp; <span class="glow">UPLINK: <span id="countLabel">0</span> CHATS</span></footer>
+  </div>
 
 <script>
 const rowsEl = document.getElementById("rows");
 const statusEl = document.getElementById("status");
 const refreshBtn = document.getElementById("refreshBtn");
 const panel = document.getElementById("downloadPanel");
+const countLabel = document.getElementById("countLabel");
 let selected = null;
 
 function setStatus(msg, type) {
@@ -78,7 +225,7 @@ function setStatus(msg, type) {
 async function load() {
   refreshBtn.disabled = true;
   rowsEl.innerHTML = "";
-  setStatus("加载中...", "ok");
+  setStatus("正在建立数据链路...", "ok");
   try {
     const res = await fetch("/api/dialogs");
     const data = await res.json();
@@ -88,13 +235,14 @@ async function load() {
       const tr = document.createElement("tr");
       tr.className = "clickable";
       const badge = `<span class="type ${d.type}">${d.type}</span>`;
-      tr.innerHTML = `<td>${escapeHtml(d.name)}</td><td>${d.id}</td><td>${badge}</td><td>${d.unread}</td>`;
+      tr.innerHTML = `<td class="name">${escapeHtml(d.name)}</td><td class="id">${d.id}</td><td>${badge}</td><td>${d.unread}</td>`;
       tr.addEventListener("click", () => select(d, tr));
       rowsEl.appendChild(tr);
     }
-    setStatus(`共 ${data.dialogs.length} 个会话。点击一行可选择并下载。`, "ok");
+    countLabel.textContent = data.dialogs.length;
+    setStatus(`数据链路正常 // 共 ${data.dialogs.length} 个会话。点击一行选择并下载。`, "ok");
   } catch (e) {
-    setStatus("加载失败: " + e.message);
+    setStatus("链路中断: " + e.message);
   } finally {
     refreshBtn.disabled = false;
   }
@@ -105,7 +253,7 @@ function select(d, tr) {
   [...rowsEl.children].forEach(r => r.classList.remove("fade"));
   tr.classList.add("fade");
   document.getElementById("selectedInfo").textContent =
-    `已选择: ${d.name} (ID: ${d.id}, 类型: ${d.type})`;
+    `◈ 已选择: ${d.name}  [ID: ${d.id}]  [${d.type}]`;
   panel.hidden = false;
 }
 
@@ -151,10 +299,10 @@ async function pollTaskStatus() {
     const data = await res.json();
     if (data.running) {
       taskEl.style.display = "block";
-      taskEl.textContent = `下载中 (会话 ${data.chat_id}): ${data.detail || "..."}`;
+      taskEl.textContent = `◉ 下载进行中 (会话 ${data.chat_id}): ${data.detail || "..."}`;
     } else if (data.chat_id) {
       taskEl.style.display = "block";
-      taskEl.textContent = `上次任务 (会话 ${data.chat_id}): ${data.detail || "已完成"}`;
+      taskEl.textContent = `◎ 上次任务 (会话 ${data.chat_id}): ${data.detail || "已完成"}`;
     } else {
       taskEl.style.display = "none";
     }
