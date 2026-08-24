@@ -18,7 +18,13 @@ cd /app/data
 case "$1" in
   download|"")
     echo "==> Running Telegram Video Downloader (downloader.py)"
-    exec python /app/downloader.py
+    python /app/downloader.py
+    echo "==> Download run finished (exit code $?)."
+    echo "==> Keeping container alive. Use 'docker exec' to inspect session/data."
+    echo "==> Restart the container to run the downloader again."
+    while true; do
+      sleep 3600
+    done
     ;;
   list|chats|list-chats)
     echo "==> Listing chats (list_chats.py) - interactive login required"

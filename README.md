@@ -73,6 +73,8 @@ docker compose logs -f telegram-downloader   # 实时查看进度
 
 下载完成的视频保存在宿主机的 `./data/downloads/` 目录，已下载记录保存在同目录的 `downloaded_ids.txt`（随卷持久化，删除它会重新下载全部视频）。
 
+> **运行结束后容器保持运行**：单次下载脚本（`downloader.py`）运行结束后，容器不会退出也不会反复重启，而是挂起等待，方便你随时用 `docker exec` 进入容器查看会话 / 数据。需要再次下载时，`docker compose restart telegram-downloader` 即可重新运行。
+
 ### 常用命令
 
 | 命令 | 说明 |
