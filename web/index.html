@@ -191,8 +191,8 @@
         <summary>下载配置</summary>
         <div class="dlrow">
           <div id="selectedInfo" style="margin-bottom:10px; color:var(--cyan);"></div>
-          <label>大小上限 (字节 / 默认 20GB):</label>
-          <input id="maxSize" type="number" value="21474836480">
+          <label>大小上限 (如 3GB / 1.5MB / 纯字节):</label>
+          <input id="maxSize" type="text" value="20GB" placeholder="如 3GB、500MB、或字节数">
           <button id="downloadBtn">▶ 开始下载</button>
           <button id="cancelBtn" class="danger">✕ 取消</button>
         </div>
@@ -262,11 +262,13 @@ async function doDownload() {
   downloadBtn.disabled = true;
   setStatus(`正在为「${selected.name}」启动下载...`, "ok");
   try {
-    const maxSize = parseInt(document.getElementById("maxSize").value, 10);
+    const rawSize = document.getElementById("maxSize").value.trim();
+    const body = { chat_id: selected.id };
+    if (rawSize) body.max_total_size = rawSize;
     const res = await fetch("/api/download", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: selected.id, max_total_size: maxSize || null }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || res.statusText);

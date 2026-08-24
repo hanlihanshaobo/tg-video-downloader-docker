@@ -43,7 +43,25 @@ _download_state = {"running": False, "chat_id": None, "detail": ""}
 
 class DownloadRequest(BaseModel):
     chat_id: int
-    max_total_size: int | None = None
+    max_total_size: str | int | None = None
+
+
+SIZE_UNITS = {"KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
+
+
+def parse_size(raw) -> int | None:
+    """Parse a size that is either plain bytes (int) or a human unit like '3GB'/'1.5MB'."""
+    if raw is None:
+        return None
+    s = str(raw).strip().upper()
+    if not s:
+        return None
+    m = re.match(r"^([\d.]+)\s*(KB|MB|GB|TB)?$", s)
+    if not m:
+        return None
+    val = float(m.group(1))
+    mult = SIZE_UNITS[m.group(2)] if m.group(2) else 1
+    return int(val * mult)
 
 
 def validate_credentials() -> str | None:
@@ -258,6 +276,10 @@ async def start_download(req: DownloadRequest):
     if _download_state["running"]:
         raise HTTPException(status_code=409, detail=f"已有下载任务进行中: {_download_state['chat_id']}")
 
+    max_size = parse_size(req.max_total_size)
+    if req.max_total_size is not None and max_size is None:
+        raise HTTPException(status_code=400, detail=f"无法解析大小上限: '{req.max_total_size}'")
+
     _download_state["running"] = True
     _download_state["chat_id"] = req.chat_id
     _download_state["detail"] = "任务已加入队列"
@@ -265,7 +287,7 @@ async def start_download(req: DownloadRequest):
     async def _task():
         try:
             async with _client_lock, _download_lock:
-                await run_download(req.chat_id, req.max_total_size or 0)
+                await run_download(req.chat_id, max_size or 0)
         except Exception as e:
             _download_state["detail"] = f"下载出错: {e}"
             print(f"[ERROR] Download task failed: {e}")

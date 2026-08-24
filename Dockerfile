@@ -104,6 +104,52 @@ open(path, "w", encoding="utf-8").write(src)
 print("dedup patch applied")
 EOF
 
+# 对 downloader.py 打【大小单位解析补丁】：
+#   让 MAX_TOTAL_SIZE 支持人类可读单位（如 1MB / 3GB / 1.5TB），
+#   而不仅是纯字节整数。
+RUN python3 - <<'EOF'
+path = "/build/src/downloader.py"
+src = open(path, encoding="utf-8").read()
+
+def patch(orig, new):
+    global src
+    n = src.count(orig)
+    if n != 1:
+        raise SystemExit(f"size patch anchor not found (count={n}): {orig[:70]!r}")
+    src = src.replace(orig, new)
+
+# 用支持单位的解析函数替换 int() 直接转换
+patch(
+    'try:\n'
+    '    MAX_TOTAL_SIZE = int(max_total_size_raw)\n'
+    'except ValueError:\n'
+    '    print(f"\\n[WARNING] Invalid MAX_TOTAL_SIZE value. Using default of 20 GB.")\n'
+    '    MAX_TOTAL_SIZE = 20 * 1024 * 1024 * 1024',
+    'def _parse_size(raw):\n'
+    '    """Parse bytes or a human unit like 3GB / 1.5MB. Returns None if invalid."""\n'
+    '    if raw is None:\n'
+    '        return None\n'
+    '    s = str(raw).strip().upper()\n'
+    '    if not s:\n'
+    '        return None\n'
+    '    import re as _re\n'
+    '    m = _re.match(r"^([\\d.]+)\\s*(KB|MB|GB|TB)?$", s)\n'
+    '    if not m:\n'
+    '        return None\n'
+    '    val = float(m.group(1))\n'
+    '    units = {"KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}\n'
+    '    mult = units[m.group(2)] if m.group(2) else 1\n'
+    '    return int(val * mult)\n'
+    '\n'
+    'MAX_TOTAL_SIZE = _parse_size(max_total_size_raw) or 20 * 1024 * 1024 * 1024\n'
+    'if _parse_size(max_total_size_raw) is None:\n'
+    '    print(f"\\n[WARNING] Invalid MAX_TOTAL_SIZE value. Using default of 20 GB.")'
+)
+
+open(path, "w", encoding="utf-8").write(src)
+print("size-parse patch applied")
+EOF
+
 # 对 list_chats.py 打【全量会话补丁】：
 #   默认脚本只列出 Channel / MegaGroup / Group，会跳过机器人和用户。
 #   本补丁让 list 命令输出所有会话（含机器人、用户）及其 ID，便于查会话 ID。
