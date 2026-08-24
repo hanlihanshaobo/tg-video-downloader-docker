@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telegram 视频下载器 - Web 后台</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 20px; line-height: 1.5;
+  }
+  h1 { margin-top: 0; }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  button {
+    padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
+    background: #2563eb; color: #fff; font-size: 14px;
+  }
+  button:hover { opacity: 0.9; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status { padding: 8px 12px; border-radius: 6px; display: none; }
+  .status.error { display: block; background: #fee2e2; color: #b91c1c; }
+  .status.ok { display: block; background: #dcfce7; color: #15803d; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
+  th { position: sticky; top: 0; background: inherit; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover { background: rgba(37, 99, 235, 0.08); }
+  .type { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+  .type.Channel { background: #dbeafe; color: #1d4ed8; }
+  .type.MegaGroup { background: #e0e7ff; color: #4338ca; }
+  .type.Group { background: #cffafe; color: #0e7490; }
+  .type.Bot { background: #fce7f3; color: #be185d; }
+  .type.User { background: #f3f4f6; color: #374151; }
+  .fade { opacity: 0.5; pointer-events: none; }
+</style>
+</head>
+<body>
+  <h1>Telegram 视频下载器</h1>
+  <div class="toolbar">
+    <button id="refreshBtn">刷新会话列表</button>
+    <span id="status" class="status"></span>
+  </div>
+
+  <details id="downloadPanel" hidden>
+    <summary>下载设置</summary>
+    <div style="margin: 12px 0;">
+      <div id="selectedInfo" style="margin-bottom: 10px;"></div>
+      <label>大小上限 (字节，默认 20GB):</label>
+      <input id="maxSize" type="number" value="21474836480" style="padding:6px; margin-left:8px;">
+      <button id="downloadBtn" style="margin-left: 12px;">开始下载</button>
+      <button id="cancelBtn">取消</button>
+    </div>
+  </details>
+
+  <table>
+    <thead>
+      <tr><th>名称</th><th>ID</th><th>类型</th><th>未读</th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+<script>
+const rowsEl = document.getElementById("rows");
+const statusEl = document.getElementById("status");
+const refreshBtn = document.getElementById("refreshBtn");
+const panel = document.getElementById("downloadPanel");
+let selected = null;
+
+function setStatus(msg, type) {
+  statusEl.textContent = msg;
+  statusEl.className = "status " + (type || "error");
+}
+
+async function load() {
+  refreshBtn.disabled = true;
+  rowsEl.innerHTML = "";
+  setStatus("加载中...", "ok");
+  try {
+    const res = await fetch("/api/dialogs");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    rowsEl.innerHTML = "";
+    for (const d of data.dialogs) {
+      const tr = document.createElement("tr");
+      tr.className = "clickable";
+      const badge = `<span class="type ${d.type}">${d.type}</span>`;
+      tr.innerHTML = `<td>${escapeHtml(d.name)}</td><td>${d.id}</td><td>${badge}</td><td>${d.unread}</td>`;
+      tr.addEventListener("click", () => select(d, tr));
+      rowsEl.appendChild(tr);
+    }
+    setStatus(`共 ${data.dialogs.length} 个会话。点击一行可选择并下载。`, "ok");
+  } catch (e) {
+    setStatus("加载失败: " + e.message);
+  } finally {
+    refreshBtn.disabled = false;
+  }
+}
+
+function select(d, tr) {
+  selected = d;
+  [...rowsEl.children].forEach(r => r.classList.remove("fade"));
+  tr.classList.add("fade");
+  document.getElementById("selectedInfo").textContent =
+    `已选择: ${d.name} (ID: ${d.id}, 类型: ${d.type})`;
+  panel.hidden = false;
+}
+
+async function doDownload() {
+  if (!selected) return;
+  downloadBtn.disabled = true;
+  setStatus(`正在为「${selected.name}」启动下载...`, "ok");
+  try {
+    const maxSize = parseInt(document.getElementById("maxSize").value, 10);
+    const res = await fetch("/api/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: selected.id, max_total_size: maxSize || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    setStatus(data.note, "ok");
+  } catch (e) {
+    setStatus("下载启动失败: " + e.message);
+  } finally {
+    downloadBtn.disabled = false;
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+refreshBtn.addEventListener("click", load);
+document.getElementById("downloadBtn").addEventListener("click", doDownload);
+document.getElementById("cancelBtn").addEventListener("click", () => {
+  selected = null;
+  panel.hidden = true;
+  [...rowsEl.children].forEach(r => r.classList.remove("fade"));
+});
+
+load();
+</script>
+</body>
+</html>

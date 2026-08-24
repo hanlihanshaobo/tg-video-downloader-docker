@@ -160,12 +160,20 @@ COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* \
     && rm -rf /wheels
 
+# Web 后台依赖（FastAPI + uvicorn）
+RUN pip install --no-cache-dir fastapi "uvicorn[standard]"
+
 # 拷贝上游脚本与本地 entrypoint
 COPY --from=builder /build/src/downloader.py /app/downloader.py
 COPY --from=builder /build/src/list_chats.py /app/list_chats.py
 COPY entrypoint.sh /app/entrypoint.sh
+COPY webapp.py /app/webapp.py
+COPY web /app/web
 RUN chmod +x /app/entrypoint.sh \
     && mkdir -p /app/data
+
+# Web 后台监听端口
+EXPOSE 8080
 
 # Python 无缓冲输出，日志即时出现在 `docker logs`
 ENV PYTHONUNBUFFERED=1

@@ -75,11 +75,28 @@ docker compose logs -f telegram-downloader   # 实时查看进度
 
 > **运行结束后容器保持运行**：单次下载脚本（`downloader.py`）运行结束后，容器不会退出也不会反复重启，而是挂起等待，方便你随时用 `docker exec` 进入容器查看会话 / 数据。需要再次下载时，`docker compose restart telegram-downloader` 即可重新运行。
 
+## Web 后台
+
+镜像内置一个轻量 **Web 后台**（FastAPI），可在浏览器中查询全部会话 ID，并点击会话直接触发下载。
+
+```bash
+docker compose up -d telegram-downloader-web   # 启动 Web 后台
+```
+
+然后浏览器访问 **http://localhost:8080**：
+
+- 页面列出你的**全部会话**（频道、群组、机器人、用户）及对应 ID
+- 点击某一行选中会话，可设置大小上限并「开始下载」
+- 下载通过后台子进程运行现有 `downloader.py`，完全复用去重逻辑，进度可在 `docker compose logs -f telegram-downloader-web` 中查看
+
+> Web 后台与主下载器共用 `./data` 卷中的同一个 session 与下载目录。首次使用前仍需先登录（`list` 命令）。
+
 ### 常用命令
 
 | 命令 | 说明 |
 | --- | --- |
 | `docker compose up -d` | 后台启动 |
+| `docker compose up -d telegram-downloader-web` | 启动 Web 后台 |
 | `docker compose run --rm telegram-downloader list` | 列出频道（首次登录） |
 | `docker compose logs -f telegram-downloader` | 跟踪下载进度 |
 | `docker compose stop` | 停止容器 |

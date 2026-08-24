@@ -25,3 +25,20 @@ services:
     # Interactive terminal needed for the first-time login
     stdin_open: true
     tty: true
+
+  telegram-downloader-web:
+    image: ghcr.io/hanlihanshaobo/tg-video-downloader-docker:latest
+    container_name: telegram-video-downloader-web
+    restart: unless-stopped
+    command: ["web"]
+
+    env_file:
+      - .env
+
+    # Same persisted session and downloads as the main container
+    volumes:
+      - ./data:/app/data
+
+    # Web backend on http://localhost:8080
+    ports:
+      - "8080:8080"

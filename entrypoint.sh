@@ -30,6 +30,11 @@ case "$1" in
     echo "==> Listing chats (list_chats.py) - interactive login required"
     exec python /app/list_chats.py
     ;;
+  web|webapp)
+    echo "==> Starting Web backend (FastAPI) on :${WEB_PORT:-8080}"
+    cd /app
+    exec python -m uvicorn webapp:app --host 0.0.0.0 --port "${WEB_PORT:-8080}"
+    ;;
   *)
     echo "==> Executing: $*"
     exec "$@"
