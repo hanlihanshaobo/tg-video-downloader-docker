@@ -223,7 +223,7 @@
 
       <table>
         <thead>
-          <tr><th data-i18n="colName"></th><th>ID</th><th data-i18n="colType"></th><th data-i18n="colUnread"></th></tr>
+          <tr><th data-i18n="colName"></th><th>ID</th><th data-i18n="colType"></th><th data-i18n="colUnread"></th><th data-i18n="colStatus"></th></tr>
         </thead>
         <tbody id="rows"></tbody>
       </table>
@@ -262,6 +262,12 @@ const I18N = {
     lastTask: (chat) => `◎ Last task (chat ${chat}): `,
     monitorActive: (chat, sec) => ` ● Auto-monitoring (chat ${chat} / every ${sec}s)`,
     monitorRunning: (chat, sec) => `● Auto-monitoring (chat ${chat} / every ${sec}s)`,
+    monitoringBadge: "MON",
+    colStatus: "Status",
+    statusMonitoring: "Monitoring",
+    statusIdle: "-",
+    stoppedAll: "Stopped all monitoring.",
+    noMonitor: "This chat is not under continuous monitoring.",
     done: "Done",
   },
   zh: {
@@ -292,6 +298,12 @@ const I18N = {
     lastTask: (chat) => `◎ 上次任务 (会话 ${chat}): `,
     monitorActive: (chat, sec) => ` ● 自动监控中 (会话 ${chat} / 每 ${sec} 秒)`,
     monitorRunning: (chat, sec) => `● 自动监控中 (会话 ${chat} / 每 ${sec} 秒)`,
+    monitoringBadge: "监控",
+    colStatus: "状态",
+    statusMonitoring: "监控中",
+    statusIdle: "-",
+    stoppedAll: "已停止全部持续监控。",
+    noMonitor: "该会话未开启持续监控。",
     done: "已完成",
   }
 };
@@ -331,6 +343,7 @@ const refreshBtn = document.getElementById("refreshBtn");
 const panel = document.getElementById("downloadPanel");
 const countLabel = document.getElementById("countLabel");
 let selected = null;
+let monitoredSet = new Set();
 
 function setStatus(msg, type) {
   statusEl.textContent = msg;
@@ -350,7 +363,10 @@ async function load() {
       const tr = document.createElement("tr");
       tr.className = "clickable";
       const badge = `<span class="type ${d.type}">${d.type}</span>`;
-      tr.innerHTML = `<td class="name">${escapeHtml(d.name)}</td><td class="id">${d.id}</td><td>${badge}</td><td>${d.unread}</td>`;
+      const mon = monitoredSet.has(d.id)
+        ? `<span class="type Channel">${t("monitoringBadge")}</span>`
+        : `<span style="color:var(--text-dim)">${t("statusIdle")}</span>`;
+      tr.innerHTML = `<td class="name">${escapeHtml(d.name)}</td><td class="id">${d.id}</td><td>${badge}</td><td>${d.unread}</td><td>${mon}</td>`;
       tr.addEventListener("click", () => select(d, tr));
       rowsEl.appendChild(tr);
     }
@@ -424,6 +440,8 @@ async function startMonitor() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || res.statusText);
     setStatus(data.note, "ok");
+    monitoredSet.add(selected.id);
+    await load();
   } catch (e) {
     setStatus(t("monitorStartFail") + e.message);
   } finally {
@@ -432,11 +450,20 @@ async function startMonitor() {
 }
 
 async function stopMonitor() {
+  const cid = selected ? selected.id : null;
+  let url = "/api/monitor";
+  if (cid) url += "?chat_id=" + cid;
   try {
-    const res = await fetch("/api/monitor", { method: "DELETE" });
+    const res = await fetch(url, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || res.statusText);
     setStatus(data.note, "ok");
+    if (cid) {
+      monitoredSet.delete(cid);
+    } else {
+      monitoredSet = new Set();
+    }
+    await load();
   } catch (e) {
     setStatus(t("monitorStopFail") + e.message);
   }
@@ -450,9 +477,17 @@ async function pollTaskStatus() {
   try {
     const res = await fetch("/api/status");
     const data = await res.json();
-    const mon = data.monitor;
-    const monText = (mon && mon.active)
-      ? t("monitorActive", mon.chat_id, mon.interval)
+    const mons = data.monitors || [];
+    const newSet = new Set(mons.map(m => m.chat_id));
+    if (newSet.size !== monitoredSet.size ||
+        [...newSet].some(cid => !monitoredSet.has(cid))) {
+      monitoredSet = newSet;
+      await load();
+    } else {
+      monitoredSet = newSet;
+    }
+    const monText = mons.length
+      ? "  " + mons.map(m => t("monitorActive", m.chat_id, m.interval)).join(" ")
       : "";
     if (data.running) {
       taskEl.style.display = "block";
@@ -460,9 +495,9 @@ async function pollTaskStatus() {
     } else if (data.chat_id) {
       taskEl.style.display = "block";
       taskEl.textContent = t("lastTask", data.chat_id) + (data.detail || t("done")) + monText;
-    } else if (mon && mon.active) {
+    } else if (mons.length) {
       taskEl.style.display = "block";
-      taskEl.textContent = t("monitorRunning", mon.chat_id, mon.interval);
+      taskEl.textContent = mons.map(m => t("monitorRunning", m.chat_id, m.interval)).join(" ");
     } else {
       taskEl.style.display = "none";
     }

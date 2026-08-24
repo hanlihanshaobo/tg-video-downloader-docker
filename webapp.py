@@ -39,7 +39,7 @@ _client = None
 _client_lock = asyncio.Lock()  # serializes dialogs query vs download
 _download_lock = asyncio.Lock()  # one download at a time
 _download_state = {"running": False, "chat_id": None, "detail": ""}
-_monitor_state = {"active": False, "chat_id": None, "interval": 300, "task": None}
+_monitors: dict[int, dict] = {}  # chat_id -> {task, interval, max_size}
 
 
 class DownloadRequest(BaseModel):
@@ -331,28 +331,30 @@ async def download_status():
         "running": _download_state["running"],
         "chat_id": _download_state["chat_id"],
         "detail": _download_state["detail"],
-        "monitor": {
-            "active": _monitor_state["active"],
-            "chat_id": _monitor_state["chat_id"],
-            "interval": _monitor_state["interval"],
-        },
+        "monitors": [
+            {"chat_id": cid, "interval": m["interval"]}
+            for cid, m in _monitors.items()
+        ],
     }
 
 
 # ---------------------------------------------------------------------
-# Auto-monitor: periodically scan a chat and download new videos
+# Auto-monitor: per-chat continuous scan & download of new videos
 # ---------------------------------------------------------------------
 
 async def _monitor_loop(chat_id: int, max_size: int, interval: int):
-    while _monitor_state["active"]:
+    entry = _monitors.get(chat_id)
+    while entry and entry.get("active", True):
         try:
             async with _client_lock, _download_lock:
                 await run_download(chat_id, max_size)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             _download_state["detail"] = f"监控扫描出错: {e}"
             print(f"[ERROR] Monitor scan failed: {e}")
         for _ in range(interval):
-            if not _monitor_state["active"]:
+            if chat_id not in _monitors:
                 return
             await asyncio.sleep(1)
 
@@ -370,37 +372,54 @@ async def start_monitor(req: MonitorRequest):
     if req.max_total_size is not None and max_size is None:
         raise HTTPException(status_code=400, detail=f"无法解析大小上限: '{req.max_total_size}'")
 
-    if _monitor_state["active"]:
+    existing = _monitors.get(req.chat_id)
+    if existing:
+        existing["interval"] = req.interval
+        existing["max_size"] = max_size or 0
         return {
             "active": True,
-            "chat_id": _monitor_state["chat_id"],
-            "interval": _monitor_state["interval"],
-            "note": "监控已在运行，未重复启动。",
+            "chat_id": req.chat_id,
+            "interval": req.interval,
+            "note": f"会话 {req.chat_id} 已在持续监控中，已更新轮询间隔为 {req.interval} 秒。",
         }
 
-    _monitor_state["active"] = True
-    _monitor_state["chat_id"] = req.chat_id
-    _monitor_state["interval"] = req.interval
-    _monitor_state["task"] = asyncio.create_task(
+    task = asyncio.create_task(
         _monitor_loop(req.chat_id, max_size or 0, req.interval)
     )
+    _monitors[req.chat_id] = {
+        "task": task,
+        "interval": req.interval,
+        "max_size": max_size or 0,
+        "active": True,
+    }
     return {
         "active": True,
         "chat_id": req.chat_id,
         "interval": req.interval,
-        "note": f"已开始自动监控会话 {req.chat_id}，每 {req.interval} 秒扫描一次新增视频。",
+        "note": f"已将会话 {req.chat_id} 加入持续监控，每 {req.interval} 秒扫描一次新增视频。",
     }
 
 
 @app.delete("/api/monitor")
-async def stop_monitor():
-    _monitor_state["active"] = False
-    task = _monitor_state.get("task")
+async def stop_monitor(chat_id: int | None = None):
+    if chat_id is None:
+        ids = list(_monitors.keys())
+        for cid in ids:
+            entry = _monitors.pop(cid)
+            entry["active"] = False
+            task = entry.get("task")
+            if task:
+                task.cancel()
+        return {"active": False, "stopped": ids, "note": "已停止全部持续监控。"}
+
+    entry = _monitors.pop(chat_id, None)
+    if not entry:
+        raise HTTPException(status_code=404, detail=f"会话 {chat_id} 未在持续监控中。")
+    entry["active"] = False
+    task = entry.get("task")
     if task:
         task.cancel()
-        _monitor_state["task"] = None
-    _monitor_state["chat_id"] = None
-    return {"active": False, "note": "自动监控已停止。"}
+    return {"active": False, "chat_id": chat_id, "note": f"已停止会话 {chat_id} 的持续监控。"}
 
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "web")), name="static")
