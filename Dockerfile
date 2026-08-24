@@ -161,7 +161,9 @@ RUN pip install --no-cache-dir /wheels/* \
     && rm -rf /wheels
 
 # Web 后台依赖（FastAPI + uvicorn）
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]"
+# 注意: 不用 uvicorn[standard]，其 httptools/watchfiles 等在 arm/v7 无预编译 wheel，
+#       而 runtime 阶段无编译器，会导致 arm/v7 构建失败。纯 uvicorn 完全够用。
+RUN pip install --no-cache-dir fastapi uvicorn
 
 # 拷贝上游脚本与本地 entrypoint
 COPY --from=builder /build/src/downloader.py /app/downloader.py
