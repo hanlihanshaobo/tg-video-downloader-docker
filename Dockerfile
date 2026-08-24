@@ -184,4 +184,4 @@ ENV PYTHONUNBUFFERED=1
 VOLUME ["/app/data"]
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["download"]
+CMD ["web"]

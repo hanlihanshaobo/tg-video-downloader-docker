@@ -35,8 +35,9 @@ cp .env.example .env
 ```ini
 API_ID=your_api_id_here
 API_HASH=your_api_hash_here
-CHANNEL_ID=your_channel_id_here
 ```
+
+> 通过 Web 后台选择下载目标，无需在 `.env` 里填 `CHANNEL_ID`。
 
 ### 2. 获取镜像
 
@@ -62,43 +63,26 @@ docker compose up -d
 docker compose run --rm telegram-downloader list
 ```
 
-登录成功后，session 会保存在宿主机的 `./data/session.session`，之后无需重复登录。`list` 会输出**全部会话**（频道、群组、用户、机器人）及其 ID，从输出中复制目标会话 ID（频道通常以 `-100` 开头），填入 `.env` 的 `CHANNEL_ID`。
+登录成功后，session 会保存在宿主机的 `./data/session.session`，之后无需重复登录。`list` 会输出**全部会话**（频道、群组、用户、机器人）及其 ID。
 
-### 4. 开始下载
+### 4. 使用 Web 后台
 
-```bash
-docker compose up -d
-docker compose logs -f telegram-downloader   # 实时查看进度
-```
-
-下载完成的视频保存在宿主机的 `./data/downloads/` 目录，已下载记录保存在同目录的 `downloaded_ids.txt`（随卷持久化，删除它会重新下载全部视频）。
-
-> **运行结束后容器保持运行**：单次下载脚本（`downloader.py`）运行结束后，容器不会退出也不会反复重启，而是挂起等待，方便你随时用 `docker exec` 进入容器查看会话 / 数据。需要再次下载时，`docker compose restart telegram-downloader` 即可重新运行。
-
-## Web 后台
-
-镜像内置一个轻量 **Web 后台**（FastAPI），可在浏览器中查询全部会话 ID，并点击会话直接触发下载。
-
-```bash
-docker compose up -d telegram-downloader-web   # 启动 Web 后台
-```
-
-然后浏览器访问 **http://localhost:8080**：
+容器默认启动 **Web 后台**，浏览器访问 **http://localhost:8080**：
 
 - 页面列出你的**全部会话**（频道、群组、机器人、用户）及对应 ID
 - 点击某一行选中会话，可设置大小上限并「开始下载」
-- 下载通过后台子进程运行现有 `downloader.py`，完全复用去重逻辑，进度可在 `docker compose logs -f telegram-downloader-web` 中查看
+- 下载在本进程内后台执行，与查询共用同一 session（无锁冲突），进度可在 `docker compose logs -f telegram-downloader` 中查看
 
-> Web 后台与主下载器共用 `./data` 卷中的同一个 session 与下载目录。首次使用前仍需先登录（`list` 命令）。
+下载完成的视频保存在宿主机的 `./data/downloads/` 目录，已下载记录保存在同目录的 `downloaded_ids.txt`（随卷持久化，删除它会重新下载全部视频）。
 
 ### 常用命令
 
 | 命令 | 说明 |
 | --- | --- |
-| `docker compose up -d` | 后台启动 |
-| `docker compose up -d telegram-downloader-web` | 启动 Web 后台 |
-| `docker compose run --rm telegram-downloader list` | 列出频道（首次登录） |
+| `docker compose up -d` | 后台启动 Web 后台（:8080） |
+| `docker compose run --rm telegram-downloader list` | 列出会话（首次登录） |
 | `docker compose logs -f telegram-downloader` | 跟踪下载进度 |
+| `docker compose run --rm telegram-downloader download` | 命令行方式运行一次下载（按 `.env` 的 CHANNEL_ID） |
 | `docker compose stop` | 停止容器 |
 | `docker run -it --rm --env-file .env -v "$PWD/data:/app/data" ghcr.io/hanlihanshaobo/tg-video-downloader-docker:latest list` | 纯 Docker 方式登录 |
 

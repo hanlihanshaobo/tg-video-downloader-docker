@@ -43,6 +43,8 @@
     <span id="status" class="status"></span>
   </div>
 
+  <div id="taskStatus" style="display:none; margin-bottom: 12px; padding: 10px 12px; border-radius: 6px; background: #f1f5f9; color: #0f172a;"></div>
+
   <details id="downloadPanel" hidden>
     <summary>下载设置</summary>
     <div style="margin: 12px 0;">
@@ -142,7 +144,28 @@ document.getElementById("cancelBtn").addEventListener("click", () => {
   [...rowsEl.children].forEach(r => r.classList.remove("fade"));
 });
 
+const taskEl = document.getElementById("taskStatus");
+async function pollTaskStatus() {
+  try {
+    const res = await fetch("/api/status");
+    const data = await res.json();
+    if (data.running) {
+      taskEl.style.display = "block";
+      taskEl.textContent = `下载中 (会话 ${data.chat_id}): ${data.detail || "..."}`;
+    } else if (data.chat_id) {
+      taskEl.style.display = "block";
+      taskEl.textContent = `上次任务 (会话 ${data.chat_id}): ${data.detail || "已完成"}`;
+    } else {
+      taskEl.style.display = "none";
+    }
+  } catch (e) {
+    // ignore transient polling errors
+  }
+}
+setInterval(pollTaskStatus, 3000);
+
 load();
+pollTaskStatus();
 </script>
 </body>
 </html>

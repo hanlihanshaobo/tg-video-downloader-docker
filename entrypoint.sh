@@ -3,9 +3,10 @@
 # Entrypoint for the Telegram Video Downloader container.
 #
 # Usage:
-#   download   (default)  -> run downloader.py
-#   list                  -> run list_chats.py (interactive login helper)
-#   <anything else>       -> execute the given command as-is
+#   web       (default)  -> start FastAPI web backend on :8080
+#   download             -> run downloader.py once, then stay alive
+#   list                 -> run list_chats.py (interactive login helper)
+#   <anything else>      -> execute the given command as-is
 #
 # The scripts are run from /app/data so the session file (session.session)
 # and downloaded files are written into the persistent volume.
