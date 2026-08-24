@@ -62,7 +62,7 @@ docker compose up -d
 docker compose run --rm telegram-downloader list
 ```
 
-登录成功后，session 会保存在宿主机的 `./data/session.session`，之后无需重复登录。从输出中复制目标频道 ID（通常以 `-100` 开头），填入 `.env` 的 `CHANNEL_ID`。
+登录成功后，session 会保存在宿主机的 `./data/session.session`，之后无需重复登录。`list` 会输出**全部会话**（频道、群组、用户、机器人）及其 ID，从输出中复制目标会话 ID（频道通常以 `-100` 开头），填入 `.env` 的 `CHANNEL_ID`。
 
 ### 4. 开始下载
 

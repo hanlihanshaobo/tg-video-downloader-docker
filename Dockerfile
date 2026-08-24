@@ -104,6 +104,49 @@ open(path, "w", encoding="utf-8").write(src)
 print("dedup patch applied")
 EOF
 
+# 对 list_chats.py 打【全量会话补丁】：
+#   默认脚本只列出 Channel / MegaGroup / Group，会跳过机器人和用户。
+#   本补丁让 list 命令输出所有会话（含机器人、用户）及其 ID，便于查会话 ID。
+RUN python3 - <<'EOF'
+path = "/build/src/list_chats.py"
+src = open(path, encoding="utf-8").read()
+
+def patch(orig, new):
+    global src
+    n = src.count(orig)
+    if n != 1:
+        raise SystemExit(f"list patch anchor not found (count={n}): {orig[:70]!r}")
+    src = src.replace(orig, new)
+
+# 让所有会话类型（含 Bot / User）都打印出来，而不是 continue 跳过
+patch(
+    '            if isinstance(entity, Channel):\n'
+    '                if entity.broadcast:\n'
+    '                    chat_type = "Channel"\n'
+    '                else:\n'
+    '                    chat_type = "MegaGroup"\n'
+    '            elif isinstance(entity, Chat):\n'
+    '                chat_type = "Group"\n'
+    '            else:\n'
+    '                # Skip Users, Bots, and other dialog types\n'
+    '                continue',
+    '            if isinstance(entity, Channel):\n'
+    '                if entity.broadcast:\n'
+    '                    chat_type = "Channel"\n'
+    '                else:\n'
+    '                    chat_type = "MegaGroup"\n'
+    '            elif isinstance(entity, Chat):\n'
+    '                chat_type = "Group"\n'
+    '            elif isinstance(entity, User):\n'
+    '                chat_type = "Bot" if entity.bot else "User"\n'
+    '            else:\n'
+    '                chat_type = type(entity).__name__'
+)
+
+open(path, "w", encoding="utf-8").write(src)
+print("list_chats patch applied")
+EOF
+
 # 编译安装依赖为 wheel（含 cryptg 等 C 扩展）
 RUN pip wheel --no-cache-dir --wheel-dir /wheels -r src/requirements.txt
 
